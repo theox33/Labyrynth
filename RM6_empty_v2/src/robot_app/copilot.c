@@ -21,22 +21,23 @@ typedef enum {
 } state_t;
 
 typedef enum {
-    E_FORWARD = 0,
+    E_STOP = 0,
+    E_FORWARD,
     E_BACKWARD,
     E_LEFT,
     E_RIGHT,
-    E_STOP,
     E_QUIT,
     NB_EVENT
 } event_t;
 
 typedef enum {
-    A_MOVE_FORWARD = 0,
+    A_NOP = 0,
+    A_MOVE_FORWARD,
     A_MOVE_BACKWARD,
     A_TURN_LEFT,
     A_TURN_RIGHT,
-    A_STOP,
-    A_NOP
+    A_STOP
+
 } action_t;
 
 typedef struct {
@@ -49,6 +50,12 @@ static transition_t transition_table[NB_STATE][NB_EVENT] = {
     [S_IDLE][E_BACKWARD] = {S_MOVING, A_MOVE_BACKWARD},
     [S_IDLE][E_LEFT]     = {S_MOVING, A_TURN_LEFT},
     [S_IDLE][E_RIGHT]    = {S_MOVING, A_TURN_RIGHT},
+
+    [S_MOVING][E_FORWARD] = {S_MOVING, A_MOVE_FORWARD},
+    [S_MOVING][E_BACKWARD] = {S_MOVING, A_MOVE_BACKWARD},
+    [S_MOVING][E_LEFT]    = {S_MOVING, A_TURN_LEFT},
+    [S_MOVING][E_RIGHT]   = {S_MOVING, A_TURN_RIGHT},
+
     [S_IDLE][E_STOP]     = {S_IDLE, A_NOP},
     [S_IDLE][E_QUIT]     = {S_QUIT, A_STOP},
     
@@ -66,19 +73,24 @@ static void execute_action(action_t action) {
     switch (action) {
         case A_MOVE_FORWARD:
             pilot_start_move((move_t){FORWARD, {DISTANCE_DEFAULT}, SPEED_DEFAULT});
+            fprintf(stderr, "Etat : %d\n", action);
             break;
         case A_MOVE_BACKWARD:
             backwards = true;
             pilot_start_move((move_t){BACKWARD, {-DISTANCE_DEFAULT}, SPEED_DEFAULT});
+            fprintf(stderr, "Etat : %d\n", action);
             break;
         case A_TURN_LEFT:
             pilot_start_move((move_t){ROTATION, {LEFT}, SPEED_DEFAULT});
+            fprintf(stderr, "Etat : %d\n", action);
             break;
         case A_TURN_RIGHT:
             pilot_start_move((move_t){ROTATION, {RIGHT}, SPEED_DEFAULT});
+            fprintf(stderr, "Etat : %d\n", action);
             break;
         case A_STOP:
             quit = true;
+            fprintf(stderr, "Etat : %d\n", action);
             break;
         case A_NOP:
         default:
@@ -104,7 +116,6 @@ void copilot_check_path(char touche) {
             return;
     }
     copilot_stop_at_step_completion();
-    backwards = false;
 }
 
 void copilot_start_path() {
