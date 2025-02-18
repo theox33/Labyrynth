@@ -2,52 +2,108 @@
 #include <stdbool.h>
 #include <stdio.h>
 #include <stdlib.h>
-#include <string.h>
-#include <time.h>
 #include <unistd.h>
 #include "copilot.h"
 #include "pilot.h"
 #include "robot.h"
 #include "configtouche.h"
 
-#define NUMBER_STEP 6
 #define SPEED_DEFAULT 50
 #define DISTANCE_DEFAULT 1
-#define STEP_INIT 0
-
-static path_status_t path_status;
-static bool quit = false;
-static bool backwards = false;
-
-/** @brief Max scanning's attempt to check if a move is finished. */
 #define ENCODERS_SCAN_NB 1000
-/** @brief Waiting time between two encoder's scans (in microseconds). */
 #define DELAY 1000
+
+typedef enum {
+    S_IDLE = 0,
+    S_MOVING,
+    S_QUIT,
+    NB_STATE
+} state_t;
+
+typedef enum {
+    E_FORWARD = 0,
+    E_BACKWARD,
+    E_LEFT,
+    E_RIGHT,
+    E_STOP,
+    E_QUIT,
+    NB_EVENT
+} event_t;
+
+typedef enum {
+    A_MOVE_FORWARD = 0,
+    A_MOVE_BACKWARD,
+    A_TURN_LEFT,
+    A_TURN_RIGHT,
+    A_STOP,
+    A_NOP
+} action_t;
+
+typedef struct {
+    state_t destination_state;
+    action_t transition_action;
+} transition_t;
+
+static transition_t transition_table[NB_STATE][NB_EVENT] = {
+    [S_IDLE][E_FORWARD]  = {S_MOVING, A_MOVE_FORWARD},
+    [S_IDLE][E_BACKWARD] = {S_MOVING, A_MOVE_BACKWARD},
+    [S_IDLE][E_LEFT]     = {S_MOVING, A_TURN_LEFT},
+    [S_IDLE][E_RIGHT]    = {S_MOVING, A_TURN_RIGHT},
+    [S_IDLE][E_STOP]     = {S_IDLE, A_NOP},
+    [S_IDLE][E_QUIT]     = {S_QUIT, A_STOP},
+    
+    [S_MOVING][E_STOP]   = {S_IDLE, A_STOP},
+    [S_MOVING][E_QUIT]   = {S_QUIT, A_STOP},
+    
+    [S_QUIT][E_QUIT]     = {S_QUIT, A_NOP}
+};
+
+static state_t state = S_IDLE;
+static bool backwards = false;
+static bool quit = false;
+
+static void execute_action(action_t action) {
+    switch (action) {
+        case A_MOVE_FORWARD:
+            pilot_start_move((move_t){FORWARD, {DISTANCE_DEFAULT}, SPEED_DEFAULT});
+            break;
+        case A_MOVE_BACKWARD:
+            backwards = true;
+            pilot_start_move((move_t){BACKWARD, {-DISTANCE_DEFAULT}, SPEED_DEFAULT});
+            break;
+        case A_TURN_LEFT:
+            pilot_start_move((move_t){ROTATION, {LEFT}, SPEED_DEFAULT});
+            break;
+        case A_TURN_RIGHT:
+            pilot_start_move((move_t){ROTATION, {RIGHT}, SPEED_DEFAULT});
+            break;
+        case A_STOP:
+            quit = true;
+            break;
+        case A_NOP:
+        default:
+            break;
+    }
+}
+
+static void run(event_t event) {
+    transition_t transition = transition_table[state][event];
+    execute_action(transition.transition_action);
+    state = transition.destination_state;
+}
 
 void copilot_check_path(char touche) {
     switch (touche) {
-        case 'z': // Avancer
-            pilot_start_move((move_t){FORWARD, {DISTANCE_DEFAULT}, SPEED_DEFAULT});
-            break;
-        case 'q': // Tourner à gauche
-            pilot_start_move((move_t){ROTATION, {LEFT}, SPEED_DEFAULT});
-            break;
-        case 'd': // Tourner à droite
-            pilot_start_move((move_t){ROTATION, {RIGHT}, SPEED_DEFAULT});
-            break;
-        case 's': // Reculer
-            // pilot_start_move((move_t){BACKWARD, {DISTANCE_DEFAULT}, SPEED_DEFAULT});
-            backwards = true;
-            pilot_start_move((move_t){BACKWARD, {-DISTANCE_DEFAULT}, (SPEED_DEFAULT)});
-            break;
-        case 'x': // Quitter
-            quit = true;
-            return; // Sortie immédiate
+        case 'z': run(E_FORWARD); break;
+        case 'q': run(E_LEFT); break;
+        case 'd': run(E_RIGHT); break;
+        case 's': run(E_BACKWARD); break;
+        case 'x': run(E_QUIT); return;
         default:
             printf("Touche non reconnue. Utilisez Z, Q, S, D, X.\n");
             return;
     }
-    copilot_stop_at_step_completion(); // Vérifie si le mouvement est terminé
+    copilot_stop_at_step_completion();
     backwards = false;
 }
 
@@ -55,18 +111,15 @@ void copilot_start_path() {
     printf("Contrôle du robot :\n");
     printf("z = Avancer | q = Gauche | s = Reculer | d = Droite | x = Quitter\n");
 
-    setRawMode();  // Active le mode brut
-
+    setRawMode();
     char key;
     while (!quit) {
-        key = getchar();  // Lire une touche
-        
-        if (key != EOF && path_status == PATH_DONE) {  // Si une touche a été pressée
-            copilot_check_path(key);  // Exécute l'action correspondante
+        key = getchar();
+        if (key != EOF) {
+            copilot_check_path(key);
         }
     }
-
-    restoreMode(); // Rétablit le mode par défaut
+    restoreMode();
     printf("Fin du contrôle.\n");
 }
 
@@ -74,11 +127,8 @@ path_status_t copilot_stop_at_step_completion() {
     for (int i = 0; i < ENCODERS_SCAN_NB; i++) {
         usleep(DELAY);
         if (pilot_stop_at_target(backwards) == MOVE_DONE) {
-            path_status = PATH_DONE;
-            break;
-        } else {
-            path_status = MOVING;
+            return PATH_DONE;
         }
     }
-    return path_status;
+    return MOVING;
 }
