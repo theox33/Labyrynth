@@ -7,8 +7,8 @@ static move_status_t robot_moving;
 static int target_pos;
 static wheel_t reference_wheel;
 
-#define DISTANCE_FORWARD 1 // adapt according robot simulator
-#define DISTANCE_TURN 1
+#define DISTANCE_FORWARD 50 // adapt according robot simulator
+#define DISTANCE_TURN 50
 
 void pilot_start_move(move_t a_move)
 {

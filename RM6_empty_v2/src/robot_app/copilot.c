@@ -3,13 +3,20 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <unistd.h>
+#include <sys/socket.h>
+#include <netinet/in.h>
+#include <arpa/inet.h>
+#include <string.h>
 #include "copilot.h"
 #include "pilot.h"
 #include "robot.h"
 #include "configtouche.h"
 
+#define PORT_DU_SERVEUR 12387
+#define MAX_PENDING_CONNECTIONS 5
+
 #define SPEED_DEFAULT 50
-#define DISTANCE_DEFAULT 1
+#define DISTANCE_DEFAULT 50
 #define ENCODERS_SCAN_NB 1000
 #define DELAY 1000
 
@@ -67,30 +74,28 @@ static transition_t transition_table[NB_STATE][NB_EVENT] = {
 
 static state_t state = S_IDLE;
 static bool backwards = false;
-// static bool quit = false;
 
 static void execute_action(action_t action) {
     switch (action) {
         case A_MOVE_FORWARD:
             pilot_start_move((move_t){FORWARD, {DISTANCE_DEFAULT}, SPEED_DEFAULT});
-            fprintf(stderr, "Etat : %d\n", action);
+            fprintf(stderr, "Action : MOVE_FORWARD\n");
             break;
         case A_MOVE_BACKWARD:
             backwards = true;
             pilot_start_move((move_t){BACKWARD, {-DISTANCE_DEFAULT}, SPEED_DEFAULT});
-            fprintf(stderr, "Etat : %d\n", action);
+            fprintf(stderr, "Action : MOVE_BACKWARD\n");
             break;
         case A_TURN_LEFT:
             pilot_start_move((move_t){ROTATION, {LEFT}, SPEED_DEFAULT});
-            fprintf(stderr, "Etat : %d\n", action);
+            fprintf(stderr, "Action : TURN_LEFT\n");
             break;
         case A_TURN_RIGHT:
             pilot_start_move((move_t){ROTATION, {RIGHT}, SPEED_DEFAULT});
-            fprintf(stderr, "Etat : %d\n", action);
+            fprintf(stderr, "Action : TURN_RIGHT\n");
             break;
         case A_STOP:
-            // quit = true;
-            fprintf(stderr, "Etat : %d\n", action);
+            fprintf(stderr, "Action : STOP\n");
             break;
         case A_NOP:
         default:
@@ -118,7 +123,6 @@ void copilot_check_path(char touche) {
     copilot_stop_at_step_completion();
 }
 
-
 path_status_t copilot_stop_at_step_completion() {
     for (int i = 0; i < ENCODERS_SCAN_NB; i++) {
         usleep(DELAY);
@@ -127,4 +131,64 @@ path_status_t copilot_stop_at_step_completion() {
         }
     }
     return MOVING;
+}
+
+// --- Nouveau main servant de serveur ---
+int main(void) {
+    int sockfd, clientfd;
+    struct sockaddr_in server_addr, client_addr;
+    socklen_t client_len = sizeof(client_addr);
+    char cmd;
+
+    // Création du socket serveur
+    sockfd = socket(AF_INET, SOCK_STREAM, 0);
+    if (sockfd < 0) {
+        perror("socket");
+        exit(EXIT_FAILURE);
+    }
+
+    // Configuration de l'adresse du serveur
+    server_addr.sin_family = AF_INET;
+    server_addr.sin_port = htons(PORT_DU_SERVEUR);
+    server_addr.sin_addr.s_addr = INADDR_ANY;
+    if (bind(sockfd, (struct sockaddr *)&server_addr, sizeof(server_addr)) < 0) {
+        perror("bind");
+        close(sockfd);
+        exit(EXIT_FAILURE);
+    }
+    printf("Copilot server: Socket lié au port %d.\n", PORT_DU_SERVEUR);
+
+    // Écoute des connexions entrantes
+    if (listen(sockfd, MAX_PENDING_CONNECTIONS) < 0) {
+        perror("listen");
+        close(sockfd);
+        exit(EXIT_FAILURE);
+    }
+    printf("Copilot server: En écoute des connexions...\n");
+
+    // Acceptation d'une connexion client
+    clientfd = accept(sockfd, (struct sockaddr *)&client_addr, &client_len);
+    if (clientfd < 0) {
+        perror("accept");
+        close(sockfd);
+        exit(EXIT_FAILURE);
+    }
+    printf("Copilot server: Client connecté.\n");
+
+    // Boucle de communication : réception des commandes et exécution
+    while (1) {
+        int n = read(clientfd, &cmd, 1);
+        if (n <= 0) {
+            break;
+        }
+        printf("Copilot server: Commande reçue : %c\n", cmd);
+        copilot_check_path(cmd);
+        if (cmd == 'x') {
+            break;
+        }
+    }
+
+    close(clientfd);
+    close(sockfd);
+    return EXIT_SUCCESS;
 }

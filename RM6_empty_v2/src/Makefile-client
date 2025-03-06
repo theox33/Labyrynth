@@ -23,7 +23,7 @@ LIB_MRPIZ = $(realpath  ../../lib_mrpiz/)
 BINDIR = ../bin
 DOCDIR = ../doc
 # Définitions des binaires (exécutables) à générer.
-EXE_NAME = go
+EXE_NAME = go-client
 EXE = $(BINDIR)/$(EXE_NAME)
 
 #
@@ -74,7 +74,7 @@ DOXYGENFLAGS =
 
 #
 # On prend tous les fichiers .c présents dans src et ses sous répertoires
-SRC = $(shell find . -type f -name '*.c')
+SRC = main.c robot_app/configtouche.c
 #on devra en générer un .o
 OBJ = $(SRC:.c=.o)
 #et verifer ses dépendances

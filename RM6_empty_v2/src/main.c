@@ -1,120 +1,108 @@
 /**
- * main program with pilot and robot modules
+ * main program with pilot and robot modules using socket for copilot communication
  */
 
-#include <signal.h>
-#include <stdio.h>
-#include <stdlib.h>
-#include <string.h>
-#include <time.h>
-#include <unistd.h>
-
-#include "robot_app/pilot.h"
-#include "robot_app/robot.h"
-#include "robot_app/copilot.h"
-#include "configtouche.h"
-
-#include "utils.h"
-
-#include "mrpiz.h"
-
-/**
- * @mainpage Robot application mission 2.
- * This projects aims to move a robot along a predefined trajectory.
- */
-
-/**
- * @enum process_state_t
- * @brief indicate the process state management for the application.
- */
-typedef enum {
-  STOPPED = 0, /**< Process is stopped */
-  ALIVE        /**< Process is running */
-} process_state_t;
-
-/** @brief Waiting time between two encoder's scans (in microseconds).
- * Adapt according to your cpu and simulator.
- */
-#define DELAY 1000
-
-/** @brief Max scanning's attempt to check if a move is finished.
- * Adapt according your move
- */
-#define ENCODERS_SCAN_NB 1000
-
-#define STEPS_NUMBER 6 /**< number of steps (or moves) in the path */
-
-// declaration of private functions
-static void app_loop(void);
-
-/**
- * @brief Global variable used for program clean exit
- */
-static process_state_t running = ALIVE;
-
-/**
- * @brief Function for CTRL+C signal management
- */
-static void sigint_handler(int dummy) { running = STOPPED; }
-
-int main(void)
-{
-  /* start the robot simulator and check its good starting */
-  if (robot_start())
-  {
-    printf("Pb lancement mrPizz\n");
-    fflush(stdout);
-    return EXIT_FAILURE;
-  }
-  printf("**** Version démo RM2 **** \n");
-  printf("**** par JDL **** \n");
-  printf("Ctrl+C pour quitter\n");
-  fflush(stdout);
-
-  /* Ctrl+C to stop the program. */
-  signal(SIGINT, sigint_handler);
-  /* main loop */
-  app_loop();
-  /* close the robot simulator */
-  robot_close();
-  return EXIT_SUCCESS;
-}
-
-/**
- * @brief Main loop for the application.
- * Send commands to the pilot and display robot's status with a specific period.
- */
-
-static bool quit = false;
-
-static void app_loop()
-{
-  robot_status_t my_status;
-
-  while (running)
-  {
-    // Lance le mode manuel
-    printf("Contrôle du robot :\n");
-    printf("z = Avancer | q = Gauche | s = Reculer | d = Droite | x = Quitter\n");
-
-    setRawMode();
-    char key;
-    while (!quit) {
-        key = getchar();
-        if (key != EOF) {
-            copilot_check_path(key);
-        }
-    }
-    restoreMode();
-    printf("Fin du contrôle.\n");
-
-    running = STOPPED;
-
-    my_status = robot_get_status();
-    fprintf(stdout, "codeurs: g = %d, d = %d\n", my_status.left_encoder,
-            my_status.right_encoder);
-    fprintf(stdout, "proxy: g = %d, c = %d, d = %d\n", my_status.left_sensor,
-            my_status.center_sensor, my_status.right_sensor);
-    fprintf(stdout, "batterie: %d %%\n", my_status.battery);
-  }
-}
+ #include <signal.h>
+ #include <stdio.h>
+ #include <stdlib.h>
+ #include <string.h>
+ #include <time.h>
+ #include <unistd.h>
+ #include <sys/socket.h>
+ #include <netinet/in.h>
+ #include <arpa/inet.h>
+ 
+ #include "robot_app/pilot.h"
+ #include "robot_app/robot.h"
+ // On ne fait plus appel directement au copilot, la communication se fait via socket
+ #include "robot_app/configtouche.h"
+ 
+ #include "utils.h"
+ #include "mrpiz.h"
+ 
+ #define PORT_DU_SERVEUR 12387
+ 
+ typedef enum {
+   STOPPED = 0,
+   ALIVE        
+ } process_state_t;
+ 
+ #define DELAY 1000
+ #define ENCODERS_SCAN_NB 1000
+ #define STEPS_NUMBER 6
+ 
+ static void app_loop(void);
+ 
+ static process_state_t running = ALIVE;
+ 
+ static void sigint_handler(int dummy) { running = STOPPED; }
+ 
+ int main(void)
+ {
+   printf("**** Version démo RM2 **** \n");
+   printf("**** par JDL **** \n");
+   printf("Ctrl+C pour quitter\n");
+   fflush(stdout);
+ 
+   signal(SIGINT, sigint_handler);
+   app_loop();
+   return EXIT_SUCCESS;
+ }
+ 
+ static bool quit = false;
+ 
+ static void app_loop()
+ {
+   robot_status_t my_status;
+   int sockfd;
+   struct sockaddr_in server_addr;
+   char key;
+ 
+   // Création du socket client
+   sockfd = socket(AF_INET, SOCK_STREAM, 0);
+   if (sockfd < 0)
+   {
+       perror("socket");
+       exit(EXIT_FAILURE);
+   }
+   
+   server_addr.sin_family = AF_INET;
+   server_addr.sin_port = htons(PORT_DU_SERVEUR);
+   server_addr.sin_addr.s_addr = inet_addr("127.0.0.1");
+   
+   // Connexion au serveur copilot
+   if (connect(sockfd, (struct sockaddr *)&server_addr, sizeof(server_addr)) < 0)
+   {
+       perror("connect");
+       exit(EXIT_FAILURE);
+   }
+   printf("Connecté au serveur copilot sur le port %d.\n", PORT_DU_SERVEUR);
+ 
+   // Affichage du menu
+   printf("Contrôle du robot :\n");
+   printf("z = Avancer | q = Gauche | s = Reculer | d = Droite | x = Quitter\n");
+ 
+   setRawMode();
+   while (!quit) {
+       key = getchar();
+       if (key != EOF) {
+           // Envoi de la touche saisie au serveur
+           if (send(sockfd, &key, 1, 0) < 0)
+           {
+               perror("send");
+               break;
+           }
+           if (key == 'x')
+           {
+               quit = true;
+           }
+       }
+   }
+   restoreMode();
+   printf("Fin du contrôle.\n");
+ 
+   running = STOPPED;
+ 
+   close(sockfd);
+ }
+ 
