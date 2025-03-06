@@ -1,6 +1,4 @@
-/**
- * main program with pilot and robot modules using socket for copilot communication
- */
+
 
  #include <signal.h>
  #include <stdio.h>
@@ -14,7 +12,6 @@
  
  #include "robot_app/pilot.h"
  #include "robot_app/robot.h"
- // On ne fait plus appel directement au copilot, la communication se fait via socket
  #include "robot_app/configtouche.h"
  
  #include "utils.h"
@@ -86,7 +83,7 @@
       usleep(1000);
        key = getchar();
        if (key != EOF) {
-           // Envoi de la touche saisie au serveur
+           // Envoi de la touche saisie au serveur "copilot"
            if (send(sockfd, &key, 1, 0) < 0)
            {
                perror("send");

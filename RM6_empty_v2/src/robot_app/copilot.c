@@ -145,9 +145,8 @@ path_status_t copilot_stop_at_step_completion() {
     return path_status;
 }
 
-// --- Nouveau main servant de serveur ---
+
 int main(void) {
-    /* start the robot simulator and check its good starting */
     if (robot_start())
     {
         printf("Pb lancement mrPizz\n");
@@ -186,7 +185,7 @@ int main(void) {
     }
     printf("Copilot server: En écoute des connexions...\n");
 
-    // Acceptation d'une connexion client
+    // Acceptation d'une connexion client 
     clientfd = accept(sockfd, (struct sockaddr *)&client_addr, &client_len);
     if (clientfd < 0) {
         perror("accept");
