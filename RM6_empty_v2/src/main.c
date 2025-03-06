@@ -83,6 +83,7 @@
  
    setRawMode();
    while (!quit) {
+      usleep(1000);
        key = getchar();
        if (key != EOF) {
            // Envoi de la touche saisie au serveur
