@@ -67,7 +67,7 @@ static transition_t transition_table[NB_STATE][NB_EVENT] = {
 
 static state_t state = S_IDLE;
 static bool backwards = false;
-static bool quit = false;
+// static bool quit = false;
 
 static void execute_action(action_t action) {
     switch (action) {
@@ -89,7 +89,7 @@ static void execute_action(action_t action) {
             fprintf(stderr, "Etat : %d\n", action);
             break;
         case A_STOP:
-            quit = true;
+            // quit = true;
             fprintf(stderr, "Etat : %d\n", action);
             break;
         case A_NOP:
@@ -118,21 +118,6 @@ void copilot_check_path(char touche) {
     copilot_stop_at_step_completion();
 }
 
-void copilot_start_path() {
-    printf("Contrôle du robot :\n");
-    printf("z = Avancer | q = Gauche | s = Reculer | d = Droite | x = Quitter\n");
-
-    setRawMode();
-    char key;
-    while (!quit) {
-        key = getchar();
-        if (key != EOF) {
-            copilot_check_path(key);
-        }
-    }
-    restoreMode();
-    printf("Fin du contrôle.\n");
-}
 
 path_status_t copilot_stop_at_step_completion() {
     for (int i = 0; i < ENCODERS_SCAN_NB; i++) {

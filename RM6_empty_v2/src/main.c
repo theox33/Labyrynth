@@ -12,6 +12,8 @@
 #include "robot_app/pilot.h"
 #include "robot_app/robot.h"
 #include "robot_app/copilot.h"
+#include "configtouche.h"
+
 #include "utils.h"
 
 #include "mrpiz.h"
@@ -83,6 +85,8 @@ int main(void)
  * Send commands to the pilot and display robot's status with a specific period.
  */
 
+static bool quit = false;
+
 static void app_loop()
 {
   robot_status_t my_status;
@@ -90,7 +94,20 @@ static void app_loop()
   while (running)
   {
     // Lance le mode manuel
-    copilot_start_path();
+    printf("Contrôle du robot :\n");
+    printf("z = Avancer | q = Gauche | s = Reculer | d = Droite | x = Quitter\n");
+
+    setRawMode();
+    char key;
+    while (!quit) {
+        key = getchar();
+        if (key != EOF) {
+            copilot_check_path(key);
+        }
+    }
+    restoreMode();
+    printf("Fin du contrôle.\n");
+
     running = STOPPED;
 
     my_status = robot_get_status();
