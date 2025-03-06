@@ -7,6 +7,9 @@
 #include <netinet/in.h>
 #include <arpa/inet.h>
 #include <string.h>
+
+#include "mrpiz.h"
+
 #include "copilot.h"
 #include "pilot.h"
 #include "robot.h"
@@ -16,9 +19,11 @@
 #define MAX_PENDING_CONNECTIONS 5
 
 #define SPEED_DEFAULT 50
-#define DISTANCE_DEFAULT 50
+#define DISTANCE_DEFAULT 1
 #define ENCODERS_SCAN_NB 1000
 #define DELAY 1000
+
+static path_status_t path_status;
 
 typedef enum {
     S_IDLE = 0,
@@ -74,6 +79,7 @@ static transition_t transition_table[NB_STATE][NB_EVENT] = {
 
 static state_t state = S_IDLE;
 static bool backwards = false;
+static bool quit = false;
 
 static void execute_action(action_t action) {
     switch (action) {
@@ -95,9 +101,11 @@ static void execute_action(action_t action) {
             fprintf(stderr, "Action : TURN_RIGHT\n");
             break;
         case A_STOP:
+            quit = true;    
             fprintf(stderr, "Action : STOP\n");
             break;
         case A_NOP:
+            break;
         default:
             break;
     }
@@ -121,20 +129,32 @@ void copilot_check_path(char touche) {
             return;
     }
     copilot_stop_at_step_completion();
+    backwards = false;
 }
 
 path_status_t copilot_stop_at_step_completion() {
     for (int i = 0; i < ENCODERS_SCAN_NB; i++) {
         usleep(DELAY);
         if (pilot_stop_at_target(backwards) == MOVE_DONE) {
-            return PATH_DONE;
+            path_status = PATH_DONE;
+            break;
+        } else {
+            path_status = MOVING;
         }
     }
-    return MOVING;
+    return path_status;
 }
 
 // --- Nouveau main servant de serveur ---
 int main(void) {
+    /* start the robot simulator and check its good starting */
+    if (robot_start())
+    {
+        printf("Pb lancement mrPizz\n");
+        fflush(stdout);
+        return EXIT_FAILURE;
+    }
+
     int sockfd, clientfd;
     struct sockaddr_in server_addr, client_addr;
     socklen_t client_len = sizeof(client_addr);
